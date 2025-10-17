@@ -111,7 +111,7 @@
             <div v-for="related in relatedPoems" :key="related.id" class="related-card" @click="goToPoem(related.id)">
               <h4 class="related-title">{{ related.title }}</h4>
               <p class="related-meta">{{ related.author }} · {{ related.dynasty }}</p>
-              <p class="related-preview">{{ related.content.split('
+              <p class="related-preview">{{ related.content.split('\
 ')[0] }}...</p>
             </div>
           </div>
@@ -170,15 +170,35 @@ const store = usePoemsStore();
 const poem = ref<PoemType | null>(null);
 
 // 添加缺失的响应式变量
+const loading = ref(true);
+const error = ref<string | null>(null);
 const isFavorite = ref(false);
 const isLiked = ref(false);
 const relatedPoems = ref<PoemType[]>([]);
 
-onMounted(async () => {
-  const id = Number(route.params.id);
-  if (Number.isFinite(id)) {
-    poem.value = await store.getById(id);
+async function loadPoem() {
+  loading.value = true;
+  error.value = null;
+  
+  try {
+    const id = Number(route.params.id);
+    if (Number.isFinite(id)) {
+      poem.value = await store.getById(id);
+      // 加载相关诗词（简化实现）
+      await store.fetchLatest(10);
+      relatedPoems.value = store.list.filter(p => p.id !== id).slice(0, 3);
+    } else {
+      error.value = '无效的诗词ID';
+    }
+  } catch (err: any) {
+    error.value = err?.message || '加载诗词失败';
+  } finally {
+    loading.value = false;
   }
+}
+
+onMounted(() => {
+  loadPoem();
 });
 
 const poemLines = computed(() => (poem.value?.content || '').split('\n').filter(Boolean));

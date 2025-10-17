@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  supabase:
+    image: supabase/postgres:15.1.0.41
+    container_name: poem-supabase-db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "54322:5432"
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d/migrations
+
+  studio:
+    image: supabase/studio:latest
+    container_name: poem-supabase-studio
+    environment:
+      STUDIO_PG_URL: postgresql://postgres:postgres@supabase:5432/postgres
+      STUDIO_PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - supabase
+
+volumes:
+  supabase_data:

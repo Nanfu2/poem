@@ -15,21 +15,62 @@
       />
       <button type="submit">搜索</button>
     </form>
+    <div class="user-actions">
+      <template v-if="user">
+        <span class="user-info">欢迎, {{ user.email }}</span>
+        <button @click="handleLogout" class="logout-btn">退出</button>
+      </template>
+      <template v-else>
+        <router-link to="/login" class="login-link">登录</router-link>
+      </template>
+    </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { supabase } from '@/services/supabase';
 
 const router = useRouter();
 const route = useRoute();
 const q = ref<string>(String(route.query.q || ''));
+const user = ref<any>(null);
+
+// 检查用户登录状态
+const checkUser = async () => {
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+  user.value = currentUser;
+};
+
+// 监听认证状态变化
+onMounted(() => {
+  checkUser();
+  
+  // 监听认证状态变化
+  supabase.auth.onAuthStateChange((_event, session) => {
+    user.value = session?.user || null;
+    
+    // 如果用户在登录页面且已登录，则跳转到首页
+    if (session?.user && route.path === '/login') {
+      router.push('/');
+    }
+  });
+});
 
 function goSearch() {
   const keyword = q.value.trim();
   router.push({ path: '/search', query: keyword ? { q: keyword } : {} });
 }
+
+const handleLogout = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error('登出失败:', error.message);
+  } else {
+    router.push('/');
+  }
+};
 </script>
 
 <style scoped>
@@ -84,5 +125,38 @@ function goSearch() {
   border: none;
   border-radius: 6px;
   cursor: pointer;
+}
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-info {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+.logout-btn {
+  padding: 6px 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.logout-btn:hover {
+  background: #dc2626;
+}
+.login-link {
+  color: var(--primary);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.login-link:hover {
+  background: var(--primary);
+  color: white;
 }
 </style>

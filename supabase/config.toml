@@ -1,0 +1,19 @@
+[general]
+project_id = "your-project-id"
+name = "poem-ai-platform"
+
+[auth]
+site_url = "https://your-project.supabase.co"
+additional_redirect_urls = []
+
+[api]
+graphql = false
+db_schema = "public, storage"
+max_rows = 1000
+
+[storage]
+file_size_limit = 52428800
+file_upload_limit = 1000
+
+[edge_functions]
+import_map_path = "supabase/functions/import_map.json"

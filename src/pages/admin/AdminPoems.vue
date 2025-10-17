@@ -148,7 +148,7 @@
                 {{ poem.status === 'draft' ? '草稿' : '已发布' }}
               </span>
             </td>
-            <td class="date-col">{{ formatDate(poem.createdAt) }}</td>
+            <td class="date-col">{{ formatDate(poem.created_at) }}</td>
             <td class="actions-col">
               <div class="action-buttons">
                 <button class="btn-action view" @click="viewPoem(poem)" title="查看">
@@ -360,6 +360,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { supabase } from '@/services/supabase';
 
 const router = useRouter();
 
@@ -393,62 +394,6 @@ const poemForm = ref({
 });
 const newTag = ref('');
 
-// 模拟诗词数据
-const mockPoems = [
-  {
-    id: 1,
-    title: '春晓',
-    author: '孟浩然',
-    dynasty: '唐',
-    content: `春眠不觉晓，处处闻啼鸟。
-夜来风雨声，花落知多少。`,
-    tags: ['春天', '自然', '抒情'],
-    views: 1250,
-    likes: 89,
-    status: 'published',
-    createdAt: '2024-01-15'
-  },
-  {
-    id: 2,
-    title: '登鹳雀楼',
-    author: '王之涣',
-    dynasty: '唐',
-    content: `白日依山尽，黄河入海流。
-欲穷千里目，更上一层楼。`,
-    tags: ['登高', '励志', '哲理'],
-    views: 980,
-    likes: 76,
-    status: 'published',
-    createdAt: '2024-01-14'
-  },
-  {
-    id: 3,
-    title: '相思',
-    author: '王维',
-    dynasty: '唐',
-    content: `红豆生南国，春来发几枝。
-愿君多采撷，此物最相思。`,
-    tags: ['爱情', '思念', '红豆'],
-    views: 1560,
-    likes: 102,
-    status: 'published',
-    createdAt: '2024-01-13'
-  },
-  {
-    id: 4,
-    title: '静夜思',
-    author: '李白',
-    dynasty: '唐',
-    content: `床前明月光，疑是地上霜。
-举头望明月，低头思故乡。`,
-    tags: ['思乡', '月亮', '夜晚'],
-    views: 2100,
-    likes: 145,
-    status: 'draft',
-    createdAt: '2024-01-12'
-  }
-];
-
 // 计算属性
 const filteredPoems = computed(() => {
   let filtered = poems.value.filter(poem => {
@@ -464,7 +409,7 @@ const filteredPoems = computed(() => {
   // 排序
   switch (sortBy.value) {
     case 'oldest':
-      filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       break;
     case 'title':
       filtered.sort((a, b) => a.title.localeCompare(b.title));
@@ -474,7 +419,7 @@ const filteredPoems = computed(() => {
       break;
     case 'newest':
     default:
-      filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       break;
   }
 
@@ -502,18 +447,27 @@ const selectedAll = computed(() => {
 });
 
 // 方法
-function loadPoems() {
+async function loadPoems() {
   loading.value = true;
   error.value = null;
   
-  setTimeout(() => {
-    poems.value = [...mockPoems];
+  try {
+    const { data, error: fetchError } = await supabase
+      .from('poems')
+      .select('*');
+      
+    if (fetchError) throw fetchError;
+    poems.value = data || [];
+  } catch (err: any) {
+    error.value = '加载诗词数据失败: ' + (err.message || '未知错误');
+    console.error('加载诗词数据失败:', err);
+  } finally {
     loading.value = false;
-  }, 1000);
+  }
 }
 
-function refreshData() {
-  loadPoems();
+async function refreshData() {
+  await loadPoems();
 }
 
 function toggleSelectAll() {
@@ -547,16 +501,29 @@ function editPoem(poem: any) {
   showAddModal.value = true;
 }
 
-function deletePoem(poem: any) {
+async function deletePoem(poem: any) {
   deletingPoem.value = poem;
   showDeleteConfirm.value = true;
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (deletingPoem.value) {
-    poems.value = poems.value.filter(p => p.id !== deletingPoem.value.id);
-    showDeleteConfirm.value = false;
-    deletingPoem.value = null;
+    try {
+      const { error } = await supabase
+        .from('poems')
+        .delete()
+        .eq('id', deletingPoem.value.id);
+        
+      if (error) throw error;
+      
+      // 从本地列表中移除
+      poems.value = poems.value.filter(p => p.id !== deletingPoem.value.id);
+      showDeleteConfirm.value = false;
+      deletingPoem.value = null;
+    } catch (err: any) {
+      error.value = '删除诗词失败: ' + (err.message || '未知错误');
+      console.error('删除诗词失败:', err);
+    }
   }
 }
 
@@ -576,24 +543,56 @@ function removeTag(tag: string) {
   poemForm.value.tags = poemForm.value.tags.filter(t => t !== tag);
 }
 
-function submitPoem() {
-  if (editingPoem.value) {
-    // 更新诗词
-    const index = poems.value.findIndex(p => p.id === editingPoem.value.id);
-    if (index > -1) {
-      poems.value[index] = { ...poemForm.value, id: editingPoem.value.id };
+async function submitPoem() {
+  try {
+    if (editingPoem.value) {
+      // 更新诗词
+      const { data, error } = await supabase
+        .from('poems')
+        .update({
+          title: poemForm.value.title,
+          author: poemForm.value.author,
+          dynasty: poemForm.value.dynasty,
+          content: poemForm.value.content,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingPoem.value.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      // 更新本地数据
+      const index = poems.value.findIndex(p => p.id === editingPoem.value.id);
+      if (index > -1) {
+        poems.value[index] = data;
+      }
+    } else {
+      // 添加新诗词
+      const { data, error } = await supabase
+        .from('poems')
+        .insert({
+          title: poemForm.value.title,
+          author: poemForm.value.author,
+          dynasty: poemForm.value.dynasty,
+          content: poemForm.value.content,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      // 添加到本地列表开头
+      poems.value.unshift(data);
     }
-  } else {
-    // 添加新诗词
-    const newPoem = {
-      ...poemForm.value,
-      id: Math.max(...poems.value.map(p => p.id), 0) + 1,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    poems.value.unshift(newPoem);
+    
+    closeModal();
+  } catch (err: any) {
+    error.value = '保存诗词失败: ' + (err.message || '未知错误');
+    console.error('保存诗词失败:', err);
   }
-  
-  closeModal();
 }
 
 function closeModal() {
@@ -611,27 +610,77 @@ function closeModal() {
   };
 }
 
-function batchPublish() {
-  poems.value.forEach(poem => {
-    if (selectedPoems.value.includes(poem.id)) {
-      poem.status = 'published';
+async function batchPublish() {
+  try {
+    // 批量发布操作
+    for (const poemId of selectedPoems.value) {
+      const { error } = await supabase
+        .from('poems')
+        .update({ status: 'published' })
+        .eq('id', poemId);
+        
+      if (error) throw error;
     }
-  });
-  clearSelection();
+    
+    // 更新本地数据
+    poems.value.forEach(poem => {
+      if (selectedPoems.value.includes(poem.id)) {
+        poem.status = 'published';
+      }
+    });
+    
+    clearSelection();
+  } catch (err: any) {
+    error.value = '批量发布失败: ' + (err.message || '未知错误');
+    console.error('批量发布失败:', err);
+  }
 }
 
-function batchDraft() {
-  poems.value.forEach(poem => {
-    if (selectedPoems.value.includes(poem.id)) {
-      poem.status = 'draft';
+async function batchDraft() {
+  try {
+    // 批量设为草稿操作
+    for (const poemId of selectedPoems.value) {
+      const { error } = await supabase
+        .from('poems')
+        .update({ status: 'draft' })
+        .eq('id', poemId);
+        
+      if (error) throw error;
     }
-  });
-  clearSelection();
+    
+    // 更新本地数据
+    poems.value.forEach(poem => {
+      if (selectedPoems.value.includes(poem.id)) {
+        poem.status = 'draft';
+      }
+    });
+    
+    clearSelection();
+  } catch (err: any) {
+    error.value = '批量设为草稿失败: ' + (err.message || '未知错误');
+    console.error('批量设为草稿失败:', err);
+  }
 }
 
-function batchDelete() {
-  poems.value = poems.value.filter(poem => !selectedPoems.value.includes(poem.id));
-  clearSelection();
+async function batchDelete() {
+  try {
+    // 批量删除操作
+    for (const poemId of selectedPoems.value) {
+      const { error } = await supabase
+        .from('poems')
+        .delete()
+        .eq('id', poemId);
+        
+      if (error) throw error;
+    }
+    
+    // 从本地列表中移除
+    poems.value = poems.value.filter(poem => !selectedPoems.value.includes(poem.id));
+    clearSelection();
+  } catch (err: any) {
+    error.value = '批量删除失败: ' + (err.message || '未知错误');
+    console.error('批量删除失败:', err);
+  }
 }
 
 function formatDate(date: string) {

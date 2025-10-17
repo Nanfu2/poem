@@ -1,7 +1,7 @@
 <template>
   <div class="app">
-    <NavBar />
-    <main class="container">
+    <NavBar v-if="!$route.meta.hideLayout" />
+    <main class="container" :class="{ 'full-screen': $route.meta.hideLayout }">
       <router-view />
     </main>
   </div>
@@ -45,6 +45,12 @@ body {
   width: 100%;
 }
 
+.container.full-screen {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+}
+
 /* 确保页面内容能正常滚动 */
 html, body {
   height: 100%;
@@ -55,6 +61,10 @@ html, body {
 @media (max-width: 768px) {
   .container {
     padding: 16px 12px;
+  }
+  
+  .container.full-screen {
+    padding: 0;
   }
 }
 </style>

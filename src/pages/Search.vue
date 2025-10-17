@@ -155,7 +155,6 @@
             v-for="poem in sortedResults"
             :key="poem.id"
             :poem="poem"
-            :highlight="currentQuery"
           />
         </div>
 
@@ -216,20 +215,14 @@ const filterBy = ref('all');
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-
-
 // 搜索历史
 const searchHistory = ref<string[]>([]);
 
-// 热门搜索标签
-const popularTags = ref([
-  '李白', '杜甫', '唐诗', '宋词', '思乡', '爱情', '山水', '明月', '春天', '秋天'
-]);
+// 热门搜索标签（从数据库获取）
+const popularTags = ref<string[]>([]);
 
 // 搜索建议
 const suggestions = ref<string[]>([]);
-
-
 
 // 计算属性
 const currentQuery = computed(() => {
@@ -282,7 +275,7 @@ const visiblePages = computed(() => {
 });
 
 // 方法
-function performSearch() {
+async function performSearch() {
   const query = searchQuery.value.trim();
   if (!query) return;
   
@@ -293,36 +286,41 @@ function performSearch() {
   // 更新URL
   router.push({ query: { q: query } });
   
-  // 模拟搜索延迟
   const startTime = Date.now();
   
-  setTimeout(() => {
-    try {
-      // 模拟搜索逻辑
-      const filtered = mockPoems.filter((poem: any) => {
-        const queryLower = query.toLowerCase();
-        return (
-          poem.title.toLowerCase().includes(queryLower) ||
-          poem.author.toLowerCase().includes(queryLower) ||
-          poem.dynasty.toLowerCase().includes(queryLower) ||
-          poem.content.toLowerCase().includes(queryLower) ||
-          poem.tags?.some((tag: string) => tag.toLowerCase().includes(queryLower))
-        );
-      });
-      
-      results.value = filtered;
-      searchTime.value = Date.now() - startTime;
-      
-      // 添加到搜索历史
-      addToSearchHistory(query);
-      
-    } catch (err) {
-      error.value = '搜索过程中出现错误';
-      results.value = [];
-    } finally {
-      loading.value = false;
-    }
-  }, 500);
+  try {
+    // 使用store进行搜索
+    await store.search(query);
+    results.value = store.list;
+    searchTime.value = Date.now() - startTime;
+    
+    // 添加到搜索历史
+    addToSearchHistory(query);
+    
+  } catch (err: any) {
+    error.value = '搜索过程中出现错误: ' + (err.message || '未知错误');
+    results.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function loadPopularTags() {
+  try {
+    // 从数据库获取热门标签（这里简单实现）
+    await store.fetchLatest(20);
+    
+    // 简单提取作者和朝代作为热门标签
+    const tags = new Set<string>();
+    store.list.forEach(poem => {
+      tags.add(poem.author);
+      tags.add(poem.dynasty || '');
+    });
+    
+    popularTags.value = Array.from(tags).filter(tag => tag).slice(0, 10);
+  } catch (err) {
+    console.error('加载热门标签失败:', err);
+  }
 }
 
 function handleInput() {
@@ -403,10 +401,13 @@ watch(() => route.query.q, (newQuery) => {
 }, { immediate: true });
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
   // 加载搜索历史
   const history = JSON.parse(localStorage.getItem('poemSearchHistory') || '[]');
   searchHistory.value = history;
+  
+  // 加载热门标签
+  await loadPopularTags();
 });
 </script>
 

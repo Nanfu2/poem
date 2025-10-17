@@ -23,7 +23,7 @@
         <h2 class="section-title">📖 每日一诗</h2>
         <div class="date-info">{{ currentDate }}</div>
       </div>
-      <article class="daily-poem">
+      <article v-if="dailyPoem && !dailyLoading" class="daily-poem">
         <div class="poem-header">
           <h3 class="poem-title">{{ dailyPoem.title }}</h3>
           <div class="poem-actions">
@@ -38,6 +38,7 @@
           <p v-for="(line, index) in dailyPoem.content.split('\n')" :key="index">{{ line }}</p>
         </div>
       </article>
+      <div v-else class="loading">加载中...</div>
     </section>
 
     <!-- 最新诗词 -->
@@ -46,24 +47,27 @@
         <h2 class="section-title">🆕 最新诗词</h2>
       </div>
 
-      <div class="poems-grid">
+      <div v-if="!latestLoading" class="poems-grid">
         <PoemCard 
-          v-for="poem in staticPoems.slice(0, 6)" 
+          v-for="poem in latestPoems" 
           :key="poem.id" 
           :poem="poem" 
         />
       </div>
+      <div v-else class="loading">加载中...</div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { usePoemsStore } from '@/stores/poems';
 import type { Poem } from '@/stores/poems';
 import PoemCard from '@/components/PoemCard.vue';
 
 const router = useRouter();
+const store = usePoemsStore();
 
 // 扩展诗词数据类型
 interface ExtendedPoem extends Poem {
@@ -73,117 +77,11 @@ interface ExtendedPoem extends Poem {
   category?: string;
 }
 
-// 静态诗词数据（丰富内容）
-const staticPoems: ExtendedPoem[] = [
-  {
-    id: 1,
-    title: '春晓',
-    author: '孟浩然',
-    dynasty: '唐',
-    content: `春眠不觉晓，处处闻啼鸟。
-夜来风雨声，花落知多少。`,
-    tags: ['春天', '自然', '抒情'],
-    views: 1250,
-    likes: 89,
-    category: 'nature'
-  },
-  {
-    id: 2,
-    title: '登鹳雀楼',
-    author: '王之涣',
-    dynasty: '唐',
-    content: `白日依山尽，黄河入海流。
-欲穷千里目，更上一层楼。`,
-    tags: ['登高', '励志', '哲理'],
-    views: 980,
-    likes: 76,
-    category: 'philosophy'
-  },
-  {
-    id: 3,
-    title: '相思',
-    author: '王维',
-    dynasty: '唐',
-    content: `红豆生南国，春来发几枝。
-愿君多采撷，此物最相思。`,
-    tags: ['爱情', '思念', '红豆'],
-    views: 1560,
-    likes: 102,
-    category: 'love'
-  },
-  {
-    id: 4,
-    title: '静夜思',
-    author: '李白',
-    dynasty: '唐',
-    content: `床前明月光，疑是地上霜。
-举头望明月，低头思故乡。`,
-    tags: ['思乡', '月亮', '夜晚'],
-    views: 2100,
-    likes: 145,
-    category: 'homesick'
-  },
-  {
-    id: 5,
-    title: '江雪',
-    author: '柳宗元',
-    dynasty: '唐',
-    content: `千山鸟飞绝，万径人踪灭。
-孤舟蓑笠翁，独钓寒江雪。`,
-    tags: ['冬天', '孤独', '自然'],
-    views: 890,
-    likes: 67,
-    category: 'nature'
-  },
-  {
-    id: 6,
-    title: '悯农',
-    author: '李绅',
-    dynasty: '唐',
-    content: `锄禾日当午，汗滴禾下土。
-谁知盘中餐，粒粒皆辛苦。`,
-    tags: ['农民', '劳动', '珍惜'],
-    views: 1340,
-    likes: 94,
-    category: 'social'
-  },
-  {
-    id: 7,
-    title: '黄鹤楼送孟浩然之广陵',
-    author: '李白',
-    dynasty: '唐',
-    content: `故人西辞黄鹤楼，烟花三月下扬州。
-孤帆远影碧空尽，唯见长江天际流。`,
-    tags: ['送别', '友情', '长江'],
-    views: 1120,
-    likes: 78,
-    category: 'friendship'
-  },
-  {
-    id: 8,
-    title: '望庐山瀑布',
-    author: '李白',
-    dynasty: '唐',
-    content: `日照香炉生紫烟，遥看瀑布挂前川。
-飞流直下三千尺，疑是银河落九天。`,
-    tags: ['瀑布', '庐山', '壮观'],
-    views: 980,
-    likes: 82,
-    category: 'nature'
-  }
-];
-
-// 每日一诗数据
-const dailyPoem = ref<ExtendedPoem>({
-  id: 4,
-  title: '静夜思',
-  author: '李白',
-  dynasty: '唐',
-  content: `床前明月光，疑是地上霜。
-举头望明月，低头思故乡。`,
-  tags: ['思乡', '月亮', '夜晚'],
-  views: 2100
-});
+// 从数据库获取的数据
+const dailyPoem = ref<ExtendedPoem | null>(null);
+const latestPoems = ref<ExtendedPoem[]>([]);
+const dailyLoading = ref(true);
+const latestLoading = ref(true);
 
 // 响应式数据
 const searchQuery = ref('');
@@ -214,6 +112,38 @@ ${poem.content}`;
     alert('诗词已复制到剪贴板！');
   });
 }
+
+// 获取每日一诗（随机选择）
+async function fetchDailyPoem() {
+  dailyLoading.value = true;
+  try {
+    const poem = await store.getRandomPoem();
+    dailyPoem.value = poem as ExtendedPoem;
+  } catch (err) {
+    console.error('获取每日一诗失败:', err);
+  } finally {
+    dailyLoading.value = false;
+  }
+}
+
+// 获取最新诗词
+async function fetchLatestPoems() {
+  latestLoading.value = true;
+  try {
+    await store.fetchLatest(6);
+    latestPoems.value = store.list as ExtendedPoem[];
+  } catch (err) {
+    console.error('获取最新诗词失败:', err);
+  } finally {
+    latestLoading.value = false;
+  }
+}
+
+// 生命周期
+onMounted(() => {
+  fetchDailyPoem();
+  fetchLatestPoems();
+});
 </script>
 
 <style scoped>
@@ -416,5 +346,11 @@ ${poem.content}`;
   .section-title {
     font-size: 1.3rem;
   }
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
 }
 </style>
