@@ -56,6 +56,9 @@
       </div>
       <div v-else class="loading">加载中...</div>
     </section>
+    
+    <!-- n8n AI聊天插件 -->
+    <N8nChatPlugin />
   </div>
 </template>
 
@@ -65,6 +68,7 @@ import { useRouter } from 'vue-router';
 import { usePoemsStore } from '@/stores/poems';
 import type { Poem } from '@/stores/poems';
 import PoemCard from '@/components/PoemCard.vue';
+import N8nChatPlugin from '@/components/N8nChatPlugin.vue';
 
 const router = useRouter();
 const store = usePoemsStore();
