@@ -26,6 +26,6 @@
     "@vitejs/plugin-vue": "^5.0.4",
     "typescript": "^5.5.4",
     "vite": "^5.4.3",
-    "supabase-cli": "^1.128.0"
+    "supabase-cli": "^0.0.21"
   }
 }
